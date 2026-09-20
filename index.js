@@ -107,7 +107,7 @@ async function processUrl(interaction, originalUrl) {
   }
 
   // Send the first attempt
-  const message = await interaction.editReply({
+  await interaction.editReply({
     content: result.url
   });
 
@@ -115,7 +115,7 @@ async function processUrl(interaction, originalUrl) {
   await wait(10000);
 
   // Fetch the message to check for embeds
-  const fetchedMessage = await message.fetch();
+  const fetchedMessage = await interaction.fetchReply();
 
   if (fetchedMessage.embeds.length > 0) {
     console.log(`✅ Embed appeared for ${result.domain} using ${result.fixer}`);
@@ -126,11 +126,11 @@ async function processUrl(interaction, originalUrl) {
 
   // Try with /?a appended
   const urlWithParam = result.url + (result.url.includes('?') ? '&a' : '?a');
-  await message.edit({ content: urlWithParam });
+  await interaction.editReply({ content: urlWithParam });
 
   await wait(10000);
 
-  const fetchedMessage2 = await message.fetch();
+  const fetchedMessage2 = await interaction.fetchReply();
 
   if (fetchedMessage2.embeds.length > 0) {
     console.log(`✅ Embed appeared with ?a parameter for ${result.domain} using ${result.fixer}`);
@@ -144,18 +144,18 @@ async function processUrl(interaction, originalUrl) {
 
   if (!nextResult.converted || nextResult.fixerIndex === result.fixerIndex) {
     // No more fixers to try
-    await message.edit({
+    await interaction.editReply({
       content: `${result.url}\n\n*No working embed fixer found. Original: ${originalUrl}*`
     });
     return;
   }
 
   // Try the next fixer
-  await message.edit({ content: nextResult.url });
+  await interaction.editReply({ content: nextResult.url });
 
   await wait(10000);
 
-  const fetchedMessage3 = await message.fetch();
+  const fetchedMessage3 = await interaction.fetchReply();
 
   if (fetchedMessage3.embeds.length > 0) {
     console.log(`✅ Embed appeared for ${nextResult.domain} using ${nextResult.fixer} (fallback)`);
