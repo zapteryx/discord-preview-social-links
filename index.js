@@ -35,7 +35,7 @@ const commands = [
   }
 ];
 
-client.once('ready', async () => {
+client.once('clientReady', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 
   await initializeFixerStatus();
@@ -65,9 +65,9 @@ client.on('interactionCreate', async (interaction) => {
     console.error('Error handling interaction:', error);
     const errorMessage = 'An error occurred while processing your request.';
     if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({ content: errorMessage, ephemeral: true });
+      await interaction.followUp({ content: errorMessage, flags: 64 }); // MessageFlags.Ephemeral
     } else {
-      await interaction.reply({ content: errorMessage, ephemeral: true });
+      await interaction.reply({ content: errorMessage, flags: 64 }); // MessageFlags.Ephemeral
     }
   }
 });
@@ -87,7 +87,7 @@ async function handlePreviewContextMenu(interaction) {
   if (!urls || urls.length === 0) {
     return interaction.reply({
       content: 'No URLs found in this message.',
-      ephemeral: true
+      flags: 64 // MessageFlags.Ephemeral
     });
   }
 
@@ -101,7 +101,7 @@ async function processUrl(interaction, originalUrl) {
   if (!result.converted) {
     return interaction.reply({
       content: 'No fixable URLs found in this message.',
-      ephemeral: true
+      flags: 64 // MessageFlags.Ephemeral
     });
   }
 
