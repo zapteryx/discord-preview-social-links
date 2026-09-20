@@ -96,15 +96,16 @@ async function handlePreviewContextMenu(interaction) {
 }
 
 async function processUrl(interaction, originalUrl) {
-  await interaction.deferReply();
-
   const result = await convertUrl(originalUrl);
 
   if (!result.converted) {
-    return interaction.editReply({
-      content: `No embed fixer available for this URL:\n${originalUrl}`
+    return interaction.reply({
+      content: 'No fixable URLs found in this message.',
+      ephemeral: true
     });
   }
+
+  await interaction.deferReply();
 
   // Send the first attempt
   await interaction.editReply({
