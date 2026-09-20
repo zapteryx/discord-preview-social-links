@@ -111,8 +111,12 @@ async function handlePreviewContextMenu(interaction) {
     const hasEmbed = message.embeds.length > 0;
 
     if (hasEmbed || messageAge <= 10000) {
+      const message = hasEmbed
+        ? 'This link already has a preview embed.'
+        : 'This link is already converted. Wait for the embed to appear or try again after 10 seconds.';
+
       return interaction.reply({
-        content: 'This link is already converted. Wait for the embed to appear or try again after 10 seconds.',
+        content: message,
         flags: 64 // MessageFlags.Ephemeral
       });
     }
