@@ -1,6 +1,6 @@
 import { Client, GatewayIntentBits, REST, Routes, PermissionFlagsBits } from 'discord.js';
 import { config } from 'dotenv';
-import { convertUrl, initializeFixerStatus, markFixerSuccess, markFixerFailed } from './lib/linkConverter.js';
+import { convertUrl, initializeFixerStatus, markFixerSuccess, markFixerFailed, isAlreadyConverted } from './lib/linkConverter.js';
 
 config();
 
@@ -74,7 +74,16 @@ client.on('interactionCreate', async (interaction) => {
 
 async function handlePreviewCommand(interaction) {
   const url = interaction.options.getString('url');
-  await processUrl(interaction, url);
+
+  // Check if the URL is already converted
+  const convertedCheck = isAlreadyConverted(url);
+
+  if (convertedCheck.isConverted) {
+    // For /preview, use the already-converted link directly and run embed checks
+    await processConvertedUrl(interaction, url, convertedCheck.domain, convertedCheck.fixer);
+  } else {
+    await processUrl(interaction, url);
+  }
 }
 
 async function handlePreviewContextMenu(interaction) {
@@ -91,8 +100,27 @@ async function handlePreviewContextMenu(interaction) {
     });
   }
 
-  // Process the first URL found
-  await processUrl(interaction, urls[0]);
+  const firstUrl = urls[0];
+
+  // Check if the URL is already converted
+  const convertedCheck = isAlreadyConverted(firstUrl);
+
+  if (convertedCheck.isConverted) {
+    // Check if embed already exists and message is more than 10 seconds old
+    const messageAge = Date.now() - message.createdTimestamp;
+    const hasEmbed = message.embeds.length > 0;
+
+    if (hasEmbed && messageAge > 10000) {
+      // Embed exists and message is old enough - run through fallback (skip first step, go straight to /?a)
+      await processConvertedUrlWithFallback(interaction, firstUrl, convertedCheck.domain, convertedCheck.fixer);
+    } else {
+      // No embed or message too recent - continue through normal process
+      await processUrl(interaction, firstUrl);
+    }
+  } else {
+    // Not converted yet - normal process
+    await processUrl(interaction, firstUrl);
+  }
 }
 
 async function processUrl(interaction, originalUrl) {
@@ -170,6 +198,104 @@ async function processUrl(interaction, originalUrl) {
     console.log(`⚠️ No embed with fallback fixer either`);
     markFixerFailed(nextResult.domain, nextResult.fixer);
   }
+}
+
+async function processConvertedUrl(interaction, url, domain, fixer) {
+  // URL is already converted - just test it with embed checks
+  await interaction.deferReply();
+
+  // Send the already-converted URL
+  await interaction.editReply({
+    content: url
+  });
+
+  // Wait 10 seconds to see if an embed appears
+  await wait(10000);
+
+  // Fetch the message to check for embeds
+  const fetchedMessage = await interaction.fetchReply();
+
+  if (fetchedMessage.embeds.length > 0) {
+    console.log(`✅ Embed appeared for already-converted ${domain} using ${fixer}`);
+    markFixerSuccess(domain, fixer);
+    return;
+  }
+
+  console.log(`⚠️ No embed after 10s for already-converted ${url}`);
+
+  // Try with /?a appended
+  const urlWithParam = url + (url.includes('?') ? '&a' : '?a');
+  await interaction.editReply({ content: urlWithParam });
+
+  await wait(10000);
+
+  const fetchedMessage2 = await interaction.fetchReply();
+
+  if (fetchedMessage2.embeds.length > 0) {
+    console.log(`✅ Embed appeared with ?a parameter for already-converted ${domain} using ${fixer}`);
+    markFixerSuccess(domain, fixer);
+    return;
+  }
+
+  console.log(`⚠️ No embed after 10s with ?a parameter for already-converted link`);
+  markFixerFailed(domain, fixer);
+
+  await interaction.editReply({
+    content: `${url}\n\n*Embed fixer not working for this already-converted link.*`
+  });
+}
+
+async function processConvertedUrlWithFallback(interaction, url, domain, fixer) {
+  // URL is already converted, has no embed, and message is >10s old
+  // Skip the first step and go straight to /?a
+  await interaction.deferReply();
+
+  // Try with /?a appended immediately
+  const urlWithParam = url + (url.includes('?') ? '&a' : '?a');
+  await interaction.editReply({ content: urlWithParam });
+
+  await wait(10000);
+
+  const fetchedMessage = await interaction.fetchReply();
+
+  if (fetchedMessage.embeds.length > 0) {
+    console.log(`✅ Embed appeared with ?a parameter (fallback) for ${domain} using ${fixer}`);
+    markFixerSuccess(domain, fixer);
+    return;
+  }
+
+  console.log(`⚠️ Fallback with ?a failed, continuing through normal process`);
+
+  // If that fails, continue through normal process
+  // This means trying to convert from scratch
+  const originalUrl = url; // The converted URL becomes our starting point
+  const result = await convertUrl(originalUrl, 0);
+
+  if (!result.converted) {
+    return interaction.editReply({
+      content: `${url}\n\n*No working embed fixer found.*`
+    });
+  }
+
+  // Try the conversion result
+  await interaction.editReply({ content: result.url });
+
+  await wait(10000);
+
+  const fetchedMessage2 = await interaction.fetchReply();
+
+  if (fetchedMessage2.embeds.length > 0) {
+    console.log(`✅ Embed appeared after full conversion for ${result.domain} using ${result.fixer}`);
+    markFixerSuccess(result.domain, result.fixer);
+    return;
+  }
+
+  console.log(`⚠️ No embed after full conversion either`);
+  markFixerFailed(result.domain, result.fixer);
+
+  await interaction.editReply({
+    content: `${result.url}\n\n*No working embed fixer found.*`
+  });
 }
 
 function wait(ms) {
