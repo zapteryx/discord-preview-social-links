@@ -1,6 +1,8 @@
 # Discord Preview Social Links
 
 A Discord user-installable app that automatically fixes social media link embeds by converting them to embed-friendly alternatives.
+> [!IMPORTANT]
+> **AI Disclaimer:** This is an AI-generated project only meant for personal use. You are welcome to contribute by creating PRs, but this project is strictly a **hobby/side project**.
 
 ## Features
 
