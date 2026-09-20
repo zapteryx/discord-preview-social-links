@@ -1,6 +1,6 @@
 import { Client, GatewayIntentBits, REST, Routes, PermissionFlagsBits } from 'discord.js';
 import { config } from 'dotenv';
-import { convertUrl, initializeFixerStatus } from './lib/linkConverter.js';
+import { convertUrl, initializeFixerStatus, markFixerSuccess, markFixerFailed } from './lib/linkConverter.js';
 
 config();
 
@@ -120,6 +120,7 @@ async function processUrl(interaction, originalUrl) {
 
   if (fetchedMessage.embeds.length > 0) {
     console.log(`✅ Embed appeared for ${result.domain} using ${result.fixer}`);
+    markFixerSuccess(result.domain, result.fixer);
     return;
   }
 
@@ -135,10 +136,14 @@ async function processUrl(interaction, originalUrl) {
 
   if (fetchedMessage2.embeds.length > 0) {
     console.log(`✅ Embed appeared with ?a parameter for ${result.domain} using ${result.fixer}`);
+    markFixerSuccess(result.domain, result.fixer);
     return;
   }
 
   console.log(`⚠️ No embed after 10s with ?a parameter`);
+
+  // Mark the first fixer as failed since it didn't work even with ?a
+  markFixerFailed(result.domain, result.fixer);
 
   // Try the next fixer
   const nextResult = await convertUrl(originalUrl, result.fixerIndex + 1);
@@ -160,8 +165,10 @@ async function processUrl(interaction, originalUrl) {
 
   if (fetchedMessage3.embeds.length > 0) {
     console.log(`✅ Embed appeared for ${nextResult.domain} using ${nextResult.fixer} (fallback)`);
+    markFixerSuccess(nextResult.domain, nextResult.fixer);
   } else {
     console.log(`⚠️ No embed with fallback fixer either`);
+    markFixerFailed(nextResult.domain, nextResult.fixer);
   }
 }
 
