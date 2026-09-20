@@ -110,13 +110,15 @@ async function handlePreviewContextMenu(interaction) {
     const messageAge = Date.now() - message.createdTimestamp;
     const hasEmbed = message.embeds.length > 0;
 
-    if (hasEmbed && messageAge > 10000) {
-      // Embed exists and message is old enough - run through fallback (skip first step, go straight to /?a)
-      await processConvertedUrlWithFallback(interaction, firstUrl, convertedCheck.domain, convertedCheck.fixer);
-    } else {
-      // No embed or message too recent - continue through normal process
-      await processUrl(interaction, firstUrl);
+    if (hasEmbed || messageAge <= 10000) {
+      return interaction.reply({
+        content: 'This link is already converted. Wait for the embed to appear or try again after 10 seconds.',
+        flags: 64 // MessageFlags.Ephemeral
+      });
     }
+
+    // Message is old enough and no embed - run through fallback (skip first step, go straight to /?a)
+    await processConvertedUrlWithFallback(interaction, firstUrl, convertedCheck.domain, convertedCheck.fixer, convertedCheck.fixerIndex);
   } else {
     // Not converted yet - normal process
     await processUrl(interaction, firstUrl);
@@ -245,10 +247,12 @@ async function processConvertedUrl(interaction, url, domain, fixer) {
   });
 }
 
-async function processConvertedUrlWithFallback(interaction, url, domain, fixer) {
+async function processConvertedUrlWithFallback(interaction, url, domain, fixer, fixerIndex) {
   // URL is already converted, has no embed, and message is >10s old
-  // Skip the first step and go straight to /?a
+  // Skip the first step and go straight to /?a (track as if we made the first attempt)
   await interaction.deferReply();
+
+  console.log(`📊 Tracking already-converted ${domain} using ${fixer} as our attempt`);
 
   // Try with /?a appended immediately
   const urlWithParam = url + (url.includes('?') ? '&a' : '?a');
@@ -264,37 +268,62 @@ async function processConvertedUrlWithFallback(interaction, url, domain, fixer) 
     return;
   }
 
-  console.log(`⚠️ Fallback with ?a failed, continuing through normal process`);
+  console.log(`⚠️ Fallback with ?a failed for ${fixer}, marking as failed and trying next fixer`);
 
-  // If that fails, continue through normal process
-  // This means trying to convert from scratch
-  const originalUrl = url; // The converted URL becomes our starting point
-  const result = await convertUrl(originalUrl, 0);
+  // Mark this fixer as failed since /?a didn't work
+  markFixerFailed(domain, fixer);
 
-  if (!result.converted) {
+  // Reconstruct the original URL by replacing the fixer domain back to the source domain
+  const urlObj = new URL(url);
+  const fixerHostname = urlObj.hostname.toLowerCase().replace('www.', '');
+  const originalUrl = url.replace(fixerHostname, domain);
+
+  console.log(`🔄 Reconstructed original URL: ${originalUrl}`);
+
+  // Try from the beginning - convertUrl will skip the failed one since it's on cooldown
+  const nextResult = await convertUrl(originalUrl, 0);
+
+  if (!nextResult.converted || nextResult.fixer === fixer) {
+    // No more fixers to try (or only got back the same failed one)
     return interaction.editReply({
       content: `${url}\n\n*No working embed fixer found.*`
     });
   }
 
-  // Try the conversion result
-  await interaction.editReply({ content: result.url });
+  // Try the next fixer
+  await interaction.editReply({ content: nextResult.url });
 
   await wait(10000);
 
   const fetchedMessage2 = await interaction.fetchReply();
 
   if (fetchedMessage2.embeds.length > 0) {
-    console.log(`✅ Embed appeared after full conversion for ${result.domain} using ${result.fixer}`);
-    markFixerSuccess(result.domain, result.fixer);
+    console.log(`✅ Embed appeared for ${nextResult.domain} using ${nextResult.fixer} (next fixer)`);
+    markFixerSuccess(nextResult.domain, nextResult.fixer);
     return;
   }
 
-  console.log(`⚠️ No embed after full conversion either`);
-  markFixerFailed(result.domain, result.fixer);
+  console.log(`⚠️ No embed with next fixer either`);
+
+  // Try next fixer with /?a
+  const nextUrlWithParam = nextResult.url + (nextResult.url.includes('?') ? '&a' : '?a');
+  await interaction.editReply({ content: nextUrlWithParam });
+
+  await wait(10000);
+
+  const fetchedMessage3 = await interaction.fetchReply();
+
+  if (fetchedMessage3.embeds.length > 0) {
+    console.log(`✅ Embed appeared with ?a parameter for ${nextResult.domain} using ${nextResult.fixer}`);
+    markFixerSuccess(nextResult.domain, nextResult.fixer);
+    return;
+  }
+
+  console.log(`⚠️ Next fixer also failed with ?a`);
+  markFixerFailed(nextResult.domain, nextResult.fixer);
 
   await interaction.editReply({
-    content: `${result.url}\n\n*No working embed fixer found.*`
+    content: `${nextResult.url}\n\n*No working embed fixer found.*`
   });
 }
 
