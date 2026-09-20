@@ -30,3 +30,7 @@ Twitter/X, Instagram, TikTok, Reddit, Facebook, Bluesky, YouTube, Twitch, and ma
 
 The bot uses `fixers.json` to map social media domains to their embed-friendly alternatives.
 The bot maintains `fixer-status.json` to track which fixers are currently working.
+
+## Credits
+Thanks to FixTweetBot's list of fixers: https://github.com/Kyrela/FixTweetBot/blob/main/README.md#awesome-fixers
+As well as to all the fixers used in the fixers list for the awesome work they're doing.
