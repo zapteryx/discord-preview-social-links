@@ -1,0 +1,5 @@
+node_modules/
+.env
+fixer-status.json
+*.log
+.DS_Store
